@@ -2,16 +2,17 @@ import numpy as np
 import math
 import pickle
 
-
+# ncol=nrow=6, play_width=600, play_height=300
 def alloc_bitrate(pred_tiles, chunk_frames, nrow_tiles, ncol_tiles, pref_bitrate, player_tiles_x, player_tiles_y):
 	vid_bitrate = []
 
 	for i in range(len(chunk_frames)):
+		# initialize 
 		chunk = chunk_frames[i]
-		chunk_pred = pred_tiles[chunk[0]-chunk_frames[0][0] : chunk[-1]-chunk_frames[0][0]]
+		# chunk_pred is a list of tuples (x,y) where x is the row number and y is the column number of the tile
+		chunk_pred = pred_tiles[chunk[0]-chunk_frames[0][0] : chunk[-1]-chunk_frames[0][0]]  
 		chunk_bitrate = [[-1 for x in range(ncol_tiles)] for y in range(nrow_tiles)]
 		chunk_weight = [[1. for x in range(ncol_tiles)] for y in range(nrow_tiles)]
-
 
 		for tile in chunk_pred:
 			tile_0 = nrow_tiles-1 if(tile[0]>=nrow_tiles) else tile[0]

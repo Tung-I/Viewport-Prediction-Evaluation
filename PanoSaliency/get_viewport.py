@@ -29,7 +29,9 @@ if __name__ == "__main__":
 		print("======= EXIT ===========")
 		exit()
 
-	PATH = '../Viewport/ds{}/'.format(dataset)
+	# prepare output directory
+	PATH = header.out_dir
+	PATH = os.path.join(PATH, '{}'.format(topic))
 	if not os.path.exists(PATH):
 		os.makedirs(PATH)
 	
@@ -50,15 +52,16 @@ if __name__ == "__main__":
 
 
 	##########################################################################
-	
+	print("Extracting Viewport data...")
 	series_ds = headoren.load_series_ds(filename_list, f_parse, dataset)
 	# series: [n_user][n_pb_timing][n_dim_of_filtered_data]
-
+	print("Transfrming to head vector...")
 	vector_ds = headoren.headpos_to_headvec(series_ds, f_extract_direction, dataset)
 	# vector_ds[n_user][n_pb_timing] = [pb_time, v, 0, 0]
 
 	_, vlength, _, _ = head_orientation_lib.topic_info_dict[topic]  # [video_name, video_length, width, height]
 
+	print("Transforming head vectors to viewport coordinates...")
 	if(dataset == 1):
 		user = 1
 		for vector in vector_ds:
@@ -104,6 +107,10 @@ if __name__ == "__main__":
 				x, y = head_orientation_lib.ang_to_geoxy(theta, phi, head_orientation_lib.H, head_orientation_lib.W)
 
 				viewport.append([mean_series_t, (x,y)])
+			
+			# out_path = os.path.join(PATH, 'viewport_ds{}_topic{}_user{}'.format(dataset, topic, user))
+			# pickle.dump(viewport, open(out_path), 'wb')
 
-			pickle.dump(viewport, open(PATH + 'viewport_ds{}_topic{}_user{}'.format(dataset, topic, user), 'wb'))
+			# pickle.dump(viewport, out_path, 'wb')
+			pickle.dump(viewport, open(PATH + '/viewport_ds{}_topic{}_user{}'.format(dataset, topic, user), 'wb'))
 			user += 1

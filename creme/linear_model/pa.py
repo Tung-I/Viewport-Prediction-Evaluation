@@ -89,10 +89,11 @@ class PARegressor(BasePA, base.Regressor):
         self.y_act = None
 
     def fit_one(self, X, x, y):
-
         x_pred, y_pred = self.predict_one(X, False, -1, -1)
+        # Calculate the update magnitude (tau) based on the current loss
         tau_x = self.calc_tau(X, self.loss(x, x_pred))
         tau_y = self.calc_tau(X, self.loss(y, y_pred))
+        # Calculate the step size (gradient step) for updating weights
         step_x = tau_x * np.sign(x - x_pred)
         step_y = tau_y * np.sign(y - y_pred)
        	

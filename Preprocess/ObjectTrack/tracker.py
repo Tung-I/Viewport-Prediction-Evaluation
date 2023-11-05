@@ -88,7 +88,7 @@ def main():
 
 			while k < len(missing):
 				try:
-					if missing[k] + 1 == missing[k+1]:
+					if missing[k] + 1 == missing[k+1]:  # if the missing is contiguous
 						k=k+1
 						contiguous.append(missing[k])
 					else:
@@ -98,11 +98,11 @@ def main():
 					break
 			k=k+1
 			
-			first_frame = contiguous[0]-1
-			last_frame = contiguous[-1]+1
+			first_frame = contiguous[0]-1  # the last frame before the missing 
+			last_frame = contiguous[-1]+1  # the first frame after the missing
 			if last_frame >= total_frames:
 				continue
-				
+			# Get the average moveming vector during the missing frames
 			pos_first = object_trajectories[first_frame][i]
 			pos_last = object_trajectories[last_frame][i]
 			fraction = 1.0/(len(contiguous)+1)
@@ -111,7 +111,7 @@ def main():
 
 			# Assign the positions to the missing frames
 			for l in range(len(contiguous)):
-				object_trajectories[contiguous[l]][i] = (pos_first[0]+(l+1)*change_x,pos_first[1]+(l+1)*change_y)
+				object_trajectories[contiguous[l]][i] = (pos_first[0]+(l+1)*change_x, pos_first[1]+(l+1)*change_y)
 
 
 	np.save(os.path.join(PATH, args.outputnpy), object_trajectories) 

@@ -8,18 +8,24 @@ from parima import build_model
 from bitrate import alloc_bitrate
 from qoe import calc_qoe
 
+VIEW_PATH = '/home/tungi/datasets/vr_dataset/viewport/'
+OBJ_PATH = '/home/tungi/datasets/vr_dataset/object_tracking/'
+
+PRED_PATH = '/home/tungi/datasets/vr_dataset/viewport/6'
 
 
 def get_data(data, frame_nos, dataset, topic, usernum, fps, milisec, width, height, view_width, view_height):
-	VIEW_PATH = '../Viewport/'
-	OBJ_PATH = '../Obj_traj/'
+
 	######################
 	offset = 0
 	#######################
 
-	obj_info = np.load(OBJ_PATH + 'ds{}/ds{}_topic{}.npy'.format(dataset, dataset, topic), allow_pickle=True,  encoding='latin1').item()
-	view_info = pickle.load(open(VIEW_PATH + 'ds{}/viewport_ds{}_topic{}_user{}'.format(dataset, dataset, topic, usernum), 'rb'), encoding='latin1')
-
+	# view_info: list of tuples (timestamp, (x,y))
+	# ex. [0.0, (246.21661637948282, 55.39030055772059)], [0.021, (246.21661637948282, 55.39030055772059)], ...
+	# obj_info: dictionary of dictionaries {frame_number: {object_id: (x,y)}}
+	# ex. obj_info[0] = {0: array([1466,  703]), 1: array([2167,  703]), 2: array([2091,  702]), 3: array([1350,  716]), 4: array([360, 727]), 5: array([1845,  706])}
+	obj_info = np.load(OBJ_PATH + 'ds{}_topic{}.npy'.format(dataset, topic), allow_pickle=True,  encoding='latin1').item()
+	view_info = pickle.load(open(VIEW_PATH + '{}/viewport_ds{}_topic{}_user{}'.format(topic, dataset, topic, usernum), 'rb'), encoding='latin1')
 
 	n_objects = []
 	for i in obj_info.keys():
@@ -61,29 +67,30 @@ def get_data(data, frame_nos, dataset, topic, usernum, fps, milisec, width, heig
 			data.append((X, int(view_info[i+1][1][1]*width/view_width),int(view_info[i+1][1][0]*height/view_height)))
 
 	elif dataset == 2:
+		# Find the frame number corresponding to the offset
+		# ex., 60 sec duration, 29 fps, min_inxe=1 and max_fram=1739
+		duration = 100
 		for k in range(len(view_info)-1):
-			if view_info[k][0]<=offset+60 and view_info[k+1][0]>offset+60:
+			if view_info[k][0]<=offset+duration and view_info[k+1][0]>offset+duration:
 				max_frame = int(view_info[k][0]*1.0*fps/milisec)
 				break
-		
 		for k in range(len(view_info)-1):
 			if view_info[k][0]<=offset and view_info[k+1][0]>offset:
 				min_index = k+1
 				break
-				
+		
 
 		prev_frame = 0
-		for i in range(min_index,len(view_info)-1):
+		for i in range(min_index, len(view_info)-1):
+			# get the current frame number
 			frame = int((view_info[i][0])*1.0*fps/milisec)
-
 			if frame == prev_frame:
 				continue
-			
 			if(frame > max_frame):
 				break
-
+			# insert the frame number into the list
 			frame_nos.append(frame)
-			
+		
 			X={}
 			X['VIEWPORT_x']=int(view_info[i][1][1]*width/view_width)
 			X['VIEWPORT_y']=int(view_info[i][1][0]*height/view_height)
@@ -106,7 +113,7 @@ def get_data(data, frame_nos, dataset, topic, usernum, fps, milisec, width, heig
 			data.append((X, int(view_info[i+1][1][1]*width/view_width),int(view_info[i+1][1][0]*height/view_height)))
 			prev_frame = frame
 			
-	return data, frame_nos, max_frame,total_objects
+	return data, frame_nos, max_frame, total_objects
 
 
 
@@ -145,20 +152,42 @@ def main():
 	player_width = jsonRead["player_width"]
 	player_height = jsonRead["player_height"]
 
+	# player_tiles_x is the number of tiles in the x direction that the player can see
 	player_tiles_x = math.ceil(player_width*ncol_tiles*1.0/width)
 	player_tiles_y = math.ceil(player_height*nrow_tiles*1.0/height)
 	
 	# Initialize variables
-	pred_nframe = args.fps
+	pred_nframe = args.fps  # prediction window size
 	data, frame_nos = [],[]
 
 	# Read Data
 	print("Reading Viewport Data and Object Trajectories...")
-	data, frame_nos, max_frame, tot_objects = get_data(data, frame_nos, args.dataset, args.topic, args.user, args.fps, milisec, width, height, view_width, view_height)
+	data, frame_nos, max_frame, tot_objects = \
+		get_data(data, frame_nos, args.dataset, args.topic, args.user, args.fps, \
+		milisec, width, height, view_width, view_height)
 	print("Data read\n")
+
 	
-	print("Build Model...")
-	act_tiles, pred_tiles, chunk_frames, manhattan_error, x_mae, y_mae = build_model(data, frame_nos, max_frame, tot_objects, width, height, nrow_tiles, ncol_tiles, args.fps, pred_nframe)
+
+	print("Build Model...")  # frame_nos: the list frame numbers; tot_objects: the number of objects
+	act_tiles, pred_tiles, chunk_frames, manhattan_error, x_mae, y_mae, \
+		gof, chunk_itm_xy_pred, chunk_final_xy_pred, chunk_gt_xy = \
+		build_model(data, frame_nos, max_frame, tot_objects, width, height, \
+		nrow_tiles, ncol_tiles, args.fps, pred_nframe)
+	
+	# print out the dimensions of each array
+	print("gof: " + str(gof.shape))
+	print("chunk_itm_xy_pred: " + str(chunk_itm_xy_pred.shape))
+	print("chunk_final_xy_pred: " + str(chunk_final_xy_pred.shape))
+	print("chunk_gt_xy: " + str(chunk_gt_xy.shape))
+
+	# Save the output np arrays to PRED_PATH
+	np.save(PRED_PATH + f'/gof.npy', chunk_frames)
+	np.save(PRED_PATH + f'/chunk_itm_xy_pred.npy', chunk_itm_xy_pred)
+	np.save(PRED_PATH + f'/chunk_final_xy_pred.npy', chunk_final_xy_pred)
+	np.save(PRED_PATH + f'/chunk_gt_xy.npy', chunk_gt_xy)
+
+	raise Exception("Stop here")
 
 	i = 0
 	while True:
