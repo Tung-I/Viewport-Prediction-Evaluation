@@ -21,6 +21,87 @@ import warnings
 import time
 
 
+def pred_frames_wo_vp(data, model, metric_X, metric_Y, frames, prev_frames, 
+	tile_manhattan_error, act_tiles, pred_tiles, count, width, height, 
+	nrow_tiles, ncol_tiles):
+
+	x_pred, y_pred = 0,0
+	series = []
+	shift_x = False
+	intermediate_xy_pred = []
+	final_xy_pred = []
+	gt_xy = []
+	
+
+	# LR prediction
+	for k in range(len(frames)):
+		[inp_k, x_act, y_act] = data[frames[k]]
+
+		gt_xy.append([x_act, y_act])
+
+		# update the model at the first frame	
+		if(k == 0):
+			x_pred, y_pred = model.predict_one(inp_k, True, x_act, y_act)
+		else:
+			x_pred, y_pred = model.predict_one(inp_k, False, None, None)	
+
+		shift = 0
+		if(x_act > x_pred):
+			if(abs(x_act - x_pred) > abs(x_act - (x_pred+width))):
+				x_pred = x_pred+width
+				shift = 1
+		else:
+			if(abs(x_act - x_pred) > abs(x_act - (x_pred-width))):
+				x_pred = x_pred-width
+				shift = 2
+
+		metric_X = metric_X.update(x_act, x_pred)
+		metric_Y = metric_Y.update(y_act, y_pred)
+
+		final_xy_pred.append([x_pred, y_pred])
+
+		# get the tile number that the actual and predicted viewport belongs to
+		if(shift == 0):
+			actual_tile_col = int(x_act * ncol_tiles / width)
+			actual_tile_row = int(y_act * nrow_tiles / height)
+			pred_tile_col = int(x_pred * ncol_tiles / width)
+			pred_tile_row = int(y_pred * nrow_tiles / height)
+		elif(shift == 1):
+			actual_tile_col = int(x_act * ncol_tiles / width)
+			actual_tile_row = int(y_act * nrow_tiles / height)
+			pred_tile_col = int((x_pred - width) * ncol_tiles / width)
+			pred_tile_row = int(y_pred * nrow_tiles / height)
+		else:
+			actual_tile_col = int(x_act * ncol_tiles / width)
+			actual_tile_row = int(y_act * nrow_tiles / height)
+			pred_tile_col = int((x_pred + width) * ncol_tiles / width)
+			pred_tile_row = int(y_pred * nrow_tiles / height)
+
+		actual_tile_row = actual_tile_row - nrow_tiles if(actual_tile_row >= nrow_tiles) else actual_tile_row
+		actual_tile_col = actual_tile_col - ncol_tiles if(actual_tile_col >= ncol_tiles) else actual_tile_col
+		actual_tile_row = actual_tile_row + nrow_tiles if actual_tile_row < 0 else actual_tile_row
+		actual_tile_col = actual_tile_col + ncol_tiles if actual_tile_col < 0 else actual_tile_col
+		
+		act_tiles.append((actual_tile_row, actual_tile_col))
+		pred_tiles.append((pred_tile_row, pred_tile_col))
+
+		tile_col_dif = ncol_tiles
+
+		if actual_tile_col < pred_tile_col:
+			tile_col_dif = \
+			min(pred_tile_col - actual_tile_col, actual_tile_col + \
+			ncol_tiles - pred_tile_col)
+		else:
+			tile_col_dif = min(actual_tile_col - pred_tile_col, ncol_tiles + \
+			pred_tile_col - actual_tile_col)
+
+		tile_manhattan_error += abs(actual_tile_row - pred_tile_row) + abs(tile_col_dif)
+		count = count+1
+
+	return metric_X, metric_Y, tile_manhattan_error, count, act_tiles, pred_tiles, \
+		intermediate_xy_pred, final_xy_pred, gt_xy
+
+
 def pred_frames(data, model, metric_X, metric_Y, frames, prev_frames, 
 	tile_manhattan_error, act_tiles, pred_tiles, count, width, height, 
 	nrow_tiles, ncol_tiles):
@@ -45,8 +126,6 @@ def pred_frames(data, model, metric_X, metric_Y, frames, prev_frames,
 	final_xy_pred = []
 	gt_xy = []
 	
-
-	# 
 	for k in range(len(prev_frames)):
 		# get the current viewport xy
 		[inp_k, x_act, y_act] = data[prev_frames[k]]
@@ -142,10 +221,9 @@ def pred_frames(data, model, metric_X, metric_Y, frames, prev_frames,
 
 
 	# LR prediction
-	# predict_one(inp_k, update, x_act, y_act)
 	for k in range(len(frames)):
 		[inp_k, x_act, y_act] = data[frames[k]]
-
+		
 		gt_xy.append([x_act, y_act])
 
 		# update the model at the first frame	
@@ -194,14 +272,6 @@ def pred_frames(data, model, metric_X, metric_Y, frames, prev_frames,
 		actual_tile_col = actual_tile_col - ncol_tiles if(actual_tile_col >= ncol_tiles) else actual_tile_col
 		actual_tile_row = actual_tile_row + nrow_tiles if actual_tile_row < 0 else actual_tile_row
 		actual_tile_col = actual_tile_col + ncol_tiles if actual_tile_col < 0 else actual_tile_col
-
-		######################################################
-		# print("x: "+str(x_act))
-		# print("x_pred: "+str(x_pred))
-		# print("y: "+str(y_act))	
-		# print("y_pred: "+str(y_pred))
-		# print("("+str(actual_tile_row)+","+str(actual_tile_col)+"),("+str(pred_tile_row)+","+str(pred_tile_col)+")")
-		# # ######################################################
 		
 		act_tiles.append((actual_tile_row, actual_tile_col))
 		pred_tiles.append((pred_tile_row, pred_tile_col))
@@ -223,8 +293,7 @@ def pred_frames(data, model, metric_X, metric_Y, frames, prev_frames,
 		intermediate_xy_pred, final_xy_pred, gt_xy
 
 
-
-def build_model(data, frame_nos, max_frame, tot_objects, width, height, nrow_tiles, ncol_tiles, fps, pred_nframe):
+def build_model(data, frame_nos, max_frame, tot_objects, width, height, nrow_tiles, ncol_tiles, fps, pred_nframe, wo_vp=False):
 	"""
 	Args:
 		frame_nos: list of frame numbers
@@ -265,10 +334,8 @@ def build_model(data, frame_nos, max_frame, tot_objects, width, height, nrow_til
 	cnt = 0
 
 	# Start predicting frames while updating model
-	
 	while True:
 		curr_frame = frame_nos[i]
-		print("The head frame of the current prediction: "+str(curr_frame))
 		# nframe: number of frames to be predicted
 		nframe = min(pred_nframe, max_frame - frame_nos[i])  
 		if(nframe < 1):  # if not remaining frames
@@ -291,10 +358,16 @@ def build_model(data, frame_nos, max_frame, tot_objects, width, height, nrow_til
 		chunk_frames.append(frames)
 		gof.append([frame_nos[f] for f in frames])
 		# get predictions
-		metric_X, metric_Y, tile_manhattan_error, count, act_tiles, pred_tiles, \
-			intermediate_xy_pred, final_xy_pred, gt_xy = \
-			pred_frames(data, model, metric_X, metric_Y, \
-			frames, prev_frames, tile_manhattan_error, act_tiles, pred_tiles, count, width, height, nrow_tiles, ncol_tiles)
+		if not wo_vp:
+			metric_X, metric_Y, tile_manhattan_error, count, act_tiles, pred_tiles, \
+				intermediate_xy_pred, final_xy_pred, gt_xy = \
+				pred_frames(data, model, metric_X, metric_Y, \
+				frames, prev_frames, tile_manhattan_error, act_tiles, pred_tiles, count, width, height, nrow_tiles, ncol_tiles)
+		else:
+			metric_X, metric_Y, tile_manhattan_error, count, act_tiles, pred_tiles, \
+				intermediate_xy_pred, final_xy_pred, gt_xy = \
+				pred_frames_wo_vp(data, model, metric_X, metric_Y, \
+				frames, prev_frames, tile_manhattan_error, act_tiles, pred_tiles, count, width, height, nrow_tiles, ncol_tiles)
 		# Batch update
 		model = model.fit_n(frames)
 

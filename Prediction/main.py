@@ -7,6 +7,7 @@ import json
 from parima import build_model
 from bitrate import alloc_bitrate
 from qoe import calc_qoe
+import os
 
 VIEW_PATH = '/home/tungi/datasets/vr_dataset/viewport/'
 OBJ_PATH = '/home/tungi/datasets/vr_dataset/object_tracking/'
@@ -68,12 +69,13 @@ def get_data(data, frame_nos, dataset, topic, usernum, fps, milisec, width, heig
 
 	elif dataset == 2:
 		# Find the frame number corresponding to the offset
-		# ex., 60 sec duration, 29 fps, min_inxe=1 and max_fram=1739
+		# ex., 60 sec duration, 29 fps, min_index=1 and max_fram=1739
 		duration = 100
 		for k in range(len(view_info)-1):
 			if view_info[k][0]<=offset+duration and view_info[k+1][0]>offset+duration:
 				max_frame = int(view_info[k][0]*1.0*fps/milisec)
 				break
+		min_index = 1
 		for k in range(len(view_info)-1):
 			if view_info[k][0]<=offset and view_info[k+1][0]>offset:
 				min_index = k+1
@@ -94,6 +96,7 @@ def get_data(data, frame_nos, dataset, topic, usernum, fps, milisec, width, heig
 			X={}
 			X['VIEWPORT_x']=int(view_info[i][1][1]*width/view_width)
 			X['VIEWPORT_y']=int(view_info[i][1][0]*height/view_height)
+			print("X['VIEWPORT_x'] = " + str(X['VIEWPORT_x']))
 			for j in range(total_objects):
 				try:
 					centroid = obj_info[frame][j]
@@ -160,14 +163,18 @@ def main():
 	pred_nframe = args.fps  # prediction window size
 	data, frame_nos = [],[]
 
+
+	
+	####################################################################################
+	####### PARIMA
+
+	print("PARIMA ...")
 	# Read Data
 	print("Reading Viewport Data and Object Trajectories...")
 	data, frame_nos, max_frame, tot_objects = \
 		get_data(data, frame_nos, args.dataset, args.topic, args.user, args.fps, \
 		milisec, width, height, view_width, view_height)
 	print("Data read\n")
-
-	
 
 	print("Build Model...")  # frame_nos: the list frame numbers; tot_objects: the number of objects
 	act_tiles, pred_tiles, chunk_frames, manhattan_error, x_mae, y_mae, \
@@ -177,17 +184,99 @@ def main():
 	
 	# print out the dimensions of each array
 	print("gof: " + str(gof.shape))
-	print("chunk_itm_xy_pred: " + str(chunk_itm_xy_pred.shape))
+	# print("chunk_itm_xy_pred: " + str(chunk_itm_xy_pred.shape))
 	print("chunk_final_xy_pred: " + str(chunk_final_xy_pred.shape))
 	print("chunk_gt_xy: " + str(chunk_gt_xy.shape))
 
 	# Save the output np arrays to PRED_PATH
-	np.save(PRED_PATH + f'/gof.npy', chunk_frames)
-	np.save(PRED_PATH + f'/chunk_itm_xy_pred.npy', chunk_itm_xy_pred)
-	np.save(PRED_PATH + f'/chunk_final_xy_pred.npy', chunk_final_xy_pred)
-	np.save(PRED_PATH + f'/chunk_gt_xy.npy', chunk_gt_xy)
+	OUTPUT_PATH = os.path.join(PRED_PATH, 'PARIMA')
+	np.save(OUTPUT_PATH + f'/gof_{args.user}.npy', chunk_frames)
+	# np.save(PRED_PATH + f'/chunk_itm_xy_pred_{args.user}.npy', chunk_itm_xy_pred)
+	np.save(OUTPUT_PATH+ f'/chunk_final_xy_pred_{args.user}.npy', chunk_final_xy_pred)
+	np.save(OUTPUT_PATH+ f'/chunk_gt_xy_{args.user}.npy', chunk_gt_xy)
 
-	raise Exception("Stop here")
+	####################################################################################
+
+	####################################################################################
+	####### ARIMA
+
+	print("ARIMA ...")
+	# Read Data
+	print("Reading Viewport Data and Object Trajectories...")
+	data, frame_nos, max_frame, tot_objects = \
+		get_data(data, frame_nos, args.dataset, args.topic, args.user, args.fps, \
+		milisec, width, height, view_width, view_height)
+	print("Data read\n")
+
+	# preserve X['VIEWPORT_x'] and X['VIEWPORT_y'] in X, and remove the rest keys in X
+	for i in range(len(data)):
+		for key in list(data[i][0].keys()):
+			if key != 'VIEWPORT_x' and key != 'VIEWPORT_y':
+				del data[i][0][key]
+
+	print("Build Model...")  # frame_nos: the list frame numbers; tot_objects: the number of objects
+	act_tiles, pred_tiles, chunk_frames, manhattan_error, x_mae, y_mae, \
+		gof, chunk_itm_xy_pred, chunk_final_xy_pred, chunk_gt_xy = \
+		build_model(data, frame_nos, max_frame, tot_objects, width, height, \
+		nrow_tiles, ncol_tiles, args.fps, pred_nframe)
+
+
+	# print out the dimensions of each array
+	print("gof: " + str(gof.shape))
+	# print("chunk_itm_xy_pred: " + str(chunk_itm_xy_pred.shape))
+	print("chunk_final_xy_pred: " + str(chunk_final_xy_pred.shape))
+	print("chunk_gt_xy: " + str(chunk_gt_xy.shape))
+
+	# Save the output np arrays to PRED_PATH
+	OUTPUT_PATH = os.path.join(PRED_PATH, 'ARIMA')
+	np.save(OUTPUT_PATH + f'/gof_{args.user}.npy', chunk_frames)
+	# np.save(PRED_PATH + f'/chunk_itm_xy_pred_{args.user}.npy', chunk_itm_xy_pred)
+	np.save(OUTPUT_PATH+ f'/chunk_final_xy_pred_{args.user}.npy', chunk_final_xy_pred)
+	np.save(OUTPUT_PATH+ f'/chunk_gt_xy_{args.user}.npy', chunk_gt_xy)
+
+	####################################################################################
+
+	####################################################################################
+	####### OBJ
+
+	print("OBJ ...")
+	# Read Data
+	print("Reading Viewport Data and Object Trajectories...")
+	data, frame_nos, max_frame, tot_objects = \
+		get_data(data, frame_nos, args.dataset, args.topic, args.user, args.fps, \
+		milisec, width, height, view_width, view_height)
+	print("Data read\n")
+
+	# remove X['VIEWPORT_x'] and X['VIEWPORT_y'] in X,
+	for i in range(len(data)):
+		for key in list(data[i][0].keys()):
+			if key == 'VIEWPORT_x' or key == 'VIEWPORT_y':
+				del data[i][0][key]
+
+	print("Build Model...")  # frame_nos: the list frame numbers; tot_objects: the number of objects
+	act_tiles, pred_tiles, chunk_frames, manhattan_error, x_mae, y_mae, \
+		gof, chunk_itm_xy_pred, chunk_final_xy_pred, chunk_gt_xy = \
+		build_model(data, frame_nos, max_frame, tot_objects, width, height, \
+		nrow_tiles, ncol_tiles, args.fps, pred_nframe, wo_vp=True)
+
+	# print out the dimensions of each array
+	print("gof: " + str(gof.shape))
+	# print("chunk_itm_xy_pred: " + str(chunk_itm_xy_pred.shape))
+	print("chunk_final_xy_pred: " + str(chunk_final_xy_pred.shape))
+	print("chunk_gt_xy: " + str(chunk_gt_xy.shape))
+
+	# Save the output np arrays to PRED_PATH
+	OUTPUT_PATH = os.path.join(PRED_PATH, 'OBJ')
+	np.save(OUTPUT_PATH + f'/gof_{args.user}.npy', chunk_frames)
+	# np.save(PRED_PATH + f'/chunk_itm_xy_pred_{args.user}.npy', chunk_itm_xy_pred)
+	np.save(OUTPUT_PATH+ f'/chunk_final_xy_pred_{args.user}.npy', chunk_final_xy_pred)
+	np.save(OUTPUT_PATH+ f'/chunk_gt_xy_{args.user}.npy', chunk_gt_xy)
+
+	####################################################################################
+
+	####################################################################################
+	# raise Exception("Stop here")
+	####################################################################################
 
 	i = 0
 	while True:
