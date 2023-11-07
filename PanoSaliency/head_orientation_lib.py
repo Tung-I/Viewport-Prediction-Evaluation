@@ -1,8 +1,11 @@
 import numpy as np
 from pyquaternion import Quaternion
 
-H = 360
-W = 720
+# H = 360
+# W = 720
+H = 1280
+W = 2560
+
 topic_info_dict = {'paris': ['paris.mp4', 244.06047, 3840, 2048], \
                    'timelapse': ['newyork.webm', 91.03333, 3840, 2048], \
                    '3': ['conan2.mp4', 172.5724, 2560, 1440], \

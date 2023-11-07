@@ -229,12 +229,16 @@ def pred_frames(data, model, metric_X, metric_Y, frames, prev_frames,
 		# update the model at the first frame	
 		if(k == 0):
 			x_pred, y_pred = model.predict_one(inp_k, True, x_act, y_act)
+			# model = model.fit_one(inp_k, x_act, y_act)
+			# x_pred, y_pred = model.predict_one(inp_k, False, None, None)	
 		else:
 			if(shift_x==True):
 				x_pred_list[k] = x_pred_list[k] - width
 			inp_k['VIEWPORT_x'] = x_pred_list[k-1]
 			inp_k['VIEWPORT_y'] = y_pred_list[k-1]
-			x_pred, y_pred = model.predict_one(inp_k, False, None, None)	
+
+			# x_pred, y_pred = model.predict_one(inp_k, False, None, None)	
+			x_pred, y_pred = model.predict_one(inp_k, True, x_act, y_act)
 
 		shift = 0
 		if(x_act > x_pred):
@@ -389,6 +393,23 @@ def build_model(data, frame_nos, max_frame, tot_objects, width, height, nrow_til
 		cnt = cnt + 1
 		if cnt == 60:
 			break
+
+	
+	# check whether each list in gof has the same length
+	# if so, do padding to make them all the same length (the padding value is the value of the previous element)
+
+	def pad_list(nested_list):
+		for i in range(len(nested_list)):
+			if len(nested_list[i]) == len(nested_list[0]):
+				continue
+			else:
+				for j in range(len(nested_list[0]) - len(nested_list[i])):
+					nested_list[i].append(nested_list[i][-1])
+		return nested_list
+	gof = pad_list(gof)
+	chunk_itm_xy_pred = pad_list(chunk_itm_xy_pred)
+	chunk_final_xy_pred = pad_list(chunk_final_xy_pred)
+	chunk_gt_xy = pad_list(chunk_gt_xy)
 
 	# transform chunk_frames, chunk_itm_xy_pred, chunk_final_xy_pred, chunk_gt_xy into np arrays
 	gof = np.array(gof)

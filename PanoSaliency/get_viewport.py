@@ -89,7 +89,7 @@ if __name__ == "__main__":
 
 					viewport.append([mean_series_t, (x,y)])
 
-			pickle.dump(viewport, open(PATH + 'viewport_ds{}_topic{}_user{}'.format(dataset, topic, user), 'wb'))
+			pickle.dump(viewport, open(PATH + '/viewport_ds{}_topic{}_user{}'.format(dataset, topic, user), 'wb'))
 			user += 1
 	else:
 		user = 1

@@ -9,10 +9,10 @@ from bitrate import alloc_bitrate
 from qoe import calc_qoe
 import os
 
-VIEW_PATH = '/home/tungi/datasets/vr_dataset/viewport/'
-OBJ_PATH = '/home/tungi/datasets/vr_dataset/object_tracking/'
+VIEW_DIR = '/home/tungi/datasets/vr_dataset/viewport/'
+OBJ_DIR = '/home/tungi/datasets/vr_dataset/object_tracking/'
 
-PRED_PATH = '/home/tungi/datasets/vr_dataset/viewport/6'
+OUT_DIR = '/home/tungi/datasets/vr_dataset/predictions'
 
 
 def get_data(data, frame_nos, dataset, topic, usernum, fps, milisec, width, height, view_width, view_height):
@@ -25,8 +25,8 @@ def get_data(data, frame_nos, dataset, topic, usernum, fps, milisec, width, heig
 	# ex. [0.0, (246.21661637948282, 55.39030055772059)], [0.021, (246.21661637948282, 55.39030055772059)], ...
 	# obj_info: dictionary of dictionaries {frame_number: {object_id: (x,y)}}
 	# ex. obj_info[0] = {0: array([1466,  703]), 1: array([2167,  703]), 2: array([2091,  702]), 3: array([1350,  716]), 4: array([360, 727]), 5: array([1845,  706])}
-	obj_info = np.load(OBJ_PATH + 'ds{}_topic{}.npy'.format(dataset, topic), allow_pickle=True,  encoding='latin1').item()
-	view_info = pickle.load(open(VIEW_PATH + '{}/viewport_ds{}_topic{}_user{}'.format(topic, dataset, topic, usernum), 'rb'), encoding='latin1')
+	obj_info = np.load(OBJ_DIR + 'ds{}_topic{}.npy'.format(dataset, topic), allow_pickle=True,  encoding='latin1').item()
+	view_info = pickle.load(open(VIEW_DIR + '{}/viewport_ds{}_topic{}_user{}'.format(topic, dataset, topic, usernum), 'rb'), encoding='latin1')
 
 	n_objects = []
 	for i in obj_info.keys():
@@ -160,11 +160,16 @@ def main():
 	player_tiles_y = math.ceil(player_height*nrow_tiles*1.0/height)
 	
 	# Initialize variables
-	pred_nframe = args.fps  # prediction window size
+	# pred_nframe = args.fps  # prediction window size
+	pred_nframe = 60
 	data, frame_nos = [],[]
 
+	# Create the path to save the output np arrays 
+	global OUT_DIR
+	OUT_DIR = os.path.join(OUT_DIR, f"{args.topic}_{args.user}")
+	if not os.path.exists(OUT_DIR):
+		os.makedirs(OUT_DIR)
 
-	
 	####################################################################################
 	####### PARIMA
 
@@ -183,17 +188,16 @@ def main():
 		nrow_tiles, ncol_tiles, args.fps, pred_nframe)
 	
 	# print out the dimensions of each array
-	print("gof: " + str(gof.shape))
+	# print("gof: " + str(gof.shape))
 	# print("chunk_itm_xy_pred: " + str(chunk_itm_xy_pred.shape))
-	print("chunk_final_xy_pred: " + str(chunk_final_xy_pred.shape))
-	print("chunk_gt_xy: " + str(chunk_gt_xy.shape))
+	# print("chunk_final_xy_pred: " + str(chunk_final_xy_pred.shape))
+	# print("chunk_gt_xy: " + str(chunk_gt_xy.shape))
 
 	# Save the output np arrays to PRED_PATH
-	OUTPUT_PATH = os.path.join(PRED_PATH, 'PARIMA')
-	np.save(OUTPUT_PATH + f'/gof_{args.user}.npy', chunk_frames)
+	np.save(OUT_DIR + '/gof.npy', chunk_frames)
 	# np.save(PRED_PATH + f'/chunk_itm_xy_pred_{args.user}.npy', chunk_itm_xy_pred)
-	np.save(OUTPUT_PATH+ f'/chunk_final_xy_pred_{args.user}.npy', chunk_final_xy_pred)
-	np.save(OUTPUT_PATH+ f'/chunk_gt_xy_{args.user}.npy', chunk_gt_xy)
+	np.save(OUT_DIR+ f'/parima_chunk_final_xy_pred.npy', chunk_final_xy_pred)
+	np.save(OUT_DIR+ f'/chunk_gt_xy.npy', chunk_gt_xy)
 
 	####################################################################################
 
@@ -220,62 +224,41 @@ def main():
 		build_model(data, frame_nos, max_frame, tot_objects, width, height, \
 		nrow_tiles, ncol_tiles, args.fps, pred_nframe)
 
-
-	# print out the dimensions of each array
-	print("gof: " + str(gof.shape))
-	# print("chunk_itm_xy_pred: " + str(chunk_itm_xy_pred.shape))
-	print("chunk_final_xy_pred: " + str(chunk_final_xy_pred.shape))
-	print("chunk_gt_xy: " + str(chunk_gt_xy.shape))
-
 	# Save the output np arrays to PRED_PATH
-	OUTPUT_PATH = os.path.join(PRED_PATH, 'ARIMA')
-	np.save(OUTPUT_PATH + f'/gof_{args.user}.npy', chunk_frames)
-	# np.save(PRED_PATH + f'/chunk_itm_xy_pred_{args.user}.npy', chunk_itm_xy_pred)
-	np.save(OUTPUT_PATH+ f'/chunk_final_xy_pred_{args.user}.npy', chunk_final_xy_pred)
-	np.save(OUTPUT_PATH+ f'/chunk_gt_xy_{args.user}.npy', chunk_gt_xy)
+	np.save(OUT_DIR+ f'/arima_chunk_final_xy_pred.npy', chunk_final_xy_pred)
 
 	####################################################################################
 
 	####################################################################################
 	####### OBJ
 
-	print("OBJ ...")
-	# Read Data
-	print("Reading Viewport Data and Object Trajectories...")
-	data, frame_nos, max_frame, tot_objects = \
-		get_data(data, frame_nos, args.dataset, args.topic, args.user, args.fps, \
-		milisec, width, height, view_width, view_height)
-	print("Data read\n")
+	# print("OBJ ...")
+	# # Read Data
+	# print("Reading Viewport Data and Object Trajectories...")
+	# data, frame_nos, max_frame, tot_objects = \
+	# 	get_data(data, frame_nos, args.dataset, args.topic, args.user, args.fps, \
+	# 	milisec, width, height, view_width, view_height)
+	# print("Data read\n")
 
-	# remove X['VIEWPORT_x'] and X['VIEWPORT_y'] in X,
-	for i in range(len(data)):
-		for key in list(data[i][0].keys()):
-			if key == 'VIEWPORT_x' or key == 'VIEWPORT_y':
-				del data[i][0][key]
+	# # remove X['VIEWPORT_x'] and X['VIEWPORT_y'] in X,
+	# for i in range(len(data)):
+	# 	for key in list(data[i][0].keys()):
+	# 		if key == 'VIEWPORT_x' or key == 'VIEWPORT_y':
+	# 			del data[i][0][key]
 
-	print("Build Model...")  # frame_nos: the list frame numbers; tot_objects: the number of objects
-	act_tiles, pred_tiles, chunk_frames, manhattan_error, x_mae, y_mae, \
-		gof, chunk_itm_xy_pred, chunk_final_xy_pred, chunk_gt_xy = \
-		build_model(data, frame_nos, max_frame, tot_objects, width, height, \
-		nrow_tiles, ncol_tiles, args.fps, pred_nframe, wo_vp=True)
+	# print("Build Model...")  # frame_nos: the list frame numbers; tot_objects: the number of objects
+	# act_tiles, pred_tiles, chunk_frames, manhattan_error, x_mae, y_mae, \
+	# 	gof, chunk_itm_xy_pred, chunk_final_xy_pred, chunk_gt_xy = \
+	# 	build_model(data, frame_nos, max_frame, tot_objects, width, height, \
+	# 	nrow_tiles, ncol_tiles, args.fps, pred_nframe, wo_vp=True)
 
-	# print out the dimensions of each array
-	print("gof: " + str(gof.shape))
-	# print("chunk_itm_xy_pred: " + str(chunk_itm_xy_pred.shape))
-	print("chunk_final_xy_pred: " + str(chunk_final_xy_pred.shape))
-	print("chunk_gt_xy: " + str(chunk_gt_xy.shape))
-
-	# Save the output np arrays to PRED_PATH
-	OUTPUT_PATH = os.path.join(PRED_PATH, 'OBJ')
-	np.save(OUTPUT_PATH + f'/gof_{args.user}.npy', chunk_frames)
-	# np.save(PRED_PATH + f'/chunk_itm_xy_pred_{args.user}.npy', chunk_itm_xy_pred)
-	np.save(OUTPUT_PATH+ f'/chunk_final_xy_pred_{args.user}.npy', chunk_final_xy_pred)
-	np.save(OUTPUT_PATH+ f'/chunk_gt_xy_{args.user}.npy', chunk_gt_xy)
+	# # Save the output np arrays to PRED_PATH
+	# np.save(OUT_DIR+ f'/obj_chunk_final_xy_pred.npy', chunk_final_xy_pred)
 
 	####################################################################################
 
 	####################################################################################
-	# raise Exception("Stop here")
+	return
 	####################################################################################
 
 	i = 0
